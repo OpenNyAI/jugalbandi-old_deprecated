@@ -1,5 +1,9 @@
+import hashlib
 import json
 import os
+import random
+import string
+import time
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, Security, status
@@ -46,6 +50,35 @@ from .server_env import init_env
 
 init_env()
 reusable_oauth = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+
+
+class TenantSignupRequest(BaseModel):
+    name: str
+    email_id: str
+    phone_number: str
+    password: str
+
+
+class TenantLoginRequest(BaseModel):
+    email_id: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    refresh_token: str
+
+
+def generate_api_key(length=32):
+    timestamp = str(time.time()).encode("utf-8")
+    random_data = "".join(
+        random.choice(string.ascii_letters + string.digits + string.punctuation)
+        for _ in range(length)
+    ).encode("utf-8")
+    combined_data = timestamp + random_data
+    api_key = hashlib.sha256(combined_data).hexdigest()[:length]
+    return api_key
 
 
 async def verify_access_token(token: Annotated[str, Depends(reusable_oauth)]):

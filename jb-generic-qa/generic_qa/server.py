@@ -4,11 +4,13 @@ from typing import Annotated, List
 
 import httpx
 from auth_service import auth_app
+from auth_service.password import get_hashed_password, verify_password
 from fastapi import Depends, FastAPI, File, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.security.api_key import APIKey
 from jugalbandi.audio_converter import convert_to_wav_with_ffmpeg
+from jugalbandi.auth_token import create_access_token, create_refresh_token
 from jugalbandi.core import (
     IncorrectInputException,
     InternalServerException,
@@ -40,7 +42,11 @@ from .query_with_tfidf import querying_with_tfidf
 from .server_env import init_env
 from .server_helper import (
     PreResponseMiddleware,
+    TenantLoginRequest,
+    TenantSignupRequest,
+    TokenResponse,
     User,
+    generate_api_key,
     get_api_key,
     get_document_repository,
     get_feedback_repository,
@@ -283,6 +289,56 @@ async def get_tenant_balance_quota(
     return {"balance_quota": response}
 
 
+@app.post(
+    "/tenant-login",
+    summary="Tenant login",
+    tags=["Tenant"],
+)
+async def tenant_login(
+    authorization: Annotated[User, Depends(verify_access_token)],
+    tenant_login_request: TenantLoginRequest,
+    tenant_repository: Annotated[TenantRepository, Depends(get_tenant_repository)],
+):
+    tenant_detail = tenant_repository.get_tenant_details(tenant_login_request.email_id)
+    if tenant_detail is None:
+        raise IncorrectInputException("Invalid login credentials")
+    else:
+        if verify_password(tenant_login_request.password, tenant_detail[5]):
+            return TokenResponse(
+                access_token=create_access_token(
+                    data={"sub": tenant_login_request.email_id}
+                ),
+                token_type="bearer",
+                refresh_token=create_refresh_token(
+                    data={"sub": tenant_login_request.email_id}
+                ),
+            )
+        else:
+            raise IncorrectInputException("Incorrect password")
+
+
+@app.post(
+    "/tenant-signup",
+    summary="Tenant signup",
+    tags=["Tenant"],
+)
+async def tenant_signup(
+    authorization: Annotated[User, Depends(verify_access_token)],
+    tenant_signup_request: TenantSignupRequest,
+    tenant_repository: Annotated[TenantRepository, Depends(get_tenant_repository)],
+):
+    registered_emails = tenant_repository.get_all_tenant_emails()
+    if tenant_signup_request.email_id in registered_emails:
+        raise Exception("Email is already registered")
+    tenant_repository.insert_into_tenant(
+        name=tenant_signup_request.name,
+        email_id=tenant_signup_request.email_id,
+        phone_number=tenant_signup_request.phone_number,
+        api_key=generate_api_key(),
+        password=get_hashed_password(password=tenant_signup_request.password),
+    )
+
+
 @app.get(
     "/tenant-details",
     summary="Get a tenant's details using Email ID",
@@ -296,6 +352,7 @@ async def get_tenant_details(
     response = await tenant_repository.get_tenant_details(email)
     if response is None:
         raise IncorrectInputException("Invalid Email ID")
+
     return {"tenant_detail": response}
 
 
