@@ -1,0 +1,49 @@
+[tool.poetry]
+name = "jb-tenant-service"
+version = "0.1.0"
+description = ""
+authors = ["OpenNyAI Team <opennyai@googlegroups.com>"]
+readme = "README.md"
+packages = [{include = "tenant"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.111.0"
+sendgrid = "^6.11.0"
+python-jose = "^3.3.0"
+jb-tenant = {path = "../packages/jb-tenant", develop = true}
+bcrypt = "^4.1.3"
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "."
+]
+
+[tool.poetry.group.dev.dependencies]
+flake8 = "^6.0.0"
+black = "^23.3.0"
+mypy = "^1.3.0"
+poethepoet = "^0.20.0"
+pytest-asyncio = "^0.21.0"
+pytest-mock = "^3.10.0"
+gunicorn = "^20.1.0"
+faker = "^18.11.1"
+pytest-celery = "^0.0.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poe.tasks.build]
+shell = """
+docker build --platform=linux/amd64  -f tools/Dockerfile -t tenant_service:latest ..
+"""
+help = "build docker container"
+
+[tool.poe.tasks.start]
+shell = """
+uvicorn --port 8000 --reload tenant.server:app
+"""
+help = "start the server for local development"
+

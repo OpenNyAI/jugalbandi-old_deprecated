@@ -33,9 +33,9 @@ Once the above installation steps are completed, you can export this package to 
 
 ```bash
 # To connect to DB
-TENANT_DATABASE_IP=<your_db_public_ip>
-TENANT_DATABASE_PORT=5432
-TENANT_DATABASE_USERNAME=<your_db_username>
-TENANT_DATABASE_PASSWORD=<your_db_password>
-TENANT_DATABASE_NAME=<your_tenant_db_name>
+POSTGRES_DATABASE_IP=<your_db_public_ip>
+POSTGRES_DATABASE_PORT=5432
+POSTGRES_DATABASE_USERNAME=<your_db_username>
+POSTGRES_DATABASE_PASSWORD=<your_db_password>
+POSTGRES_DATABASE_NAME=<your_db_name>
 ```

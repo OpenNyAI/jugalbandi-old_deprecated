@@ -17,6 +17,14 @@
       "path": "jb-labeling-service"
     },
     {
+      "name": "Tenant Service",
+      "path": "jb-tenant-service"
+    },
+    {
+      "name": "Streamlit UI",
+      "path": "jb-streamlit-ui"
+    },
+    {
       "name": "Package jb-core",
       "path": "packages/jb-core"
     },
@@ -133,13 +141,13 @@
     "[typescript]": {
       "editor.defaultFormatter": "dbaeumer.vscode-eslint", // preconfig ESLint
       "editor.codeActionsOnSave": {
-        "source.fixAll": true
+        "source.fixAll": "explicit"
       }
     },
     "[typescriptreact]": {
       "editor.defaultFormatter": "dbaeumer.vscode-eslint", // preconfig ESLint
       "editor.codeActionsOnSave": {
-        "source.fixAll": true
+        "source.fixAll": "explicit"
       }
     },
     // json
