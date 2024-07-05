@@ -58,7 +58,7 @@ async def login(
             content={"message": "Invalid credentials"},
         )
     if not verify_password(
-        password=form_data.password, hashed_password=tenant_detail[5]
+        password=form_data.password, hashed_password=tenant_detail[4]
     ):
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -66,7 +66,7 @@ async def login(
         )
 
     access_token = create_token(
-        data={"email": form_data.username},
+        data={"email": form_data.username, "name": tenant_detail[0]},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRY_MINUTES),
     )
     refresh_token = create_token(
