@@ -1,10 +1,12 @@
+import operator
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Dict
 
-import psycopg2
+import asyncpg
 import pytz
 from cachetools import cached
 from dotenv import load_dotenv
+from jugalbandi.core.caching import aiocachedmethod
 from pydantic import BaseSettings, Field
 
 
@@ -29,25 +31,28 @@ def get_tenant_db_settings():
 class TenantRepository:
     def __init__(self) -> None:
         self.tenant_db_settings = get_tenant_db_settings()
+        self.engine_cache: Dict[str, asyncpg.Pool] = {}
 
-    def _get_engine(self) -> psycopg2:
-        engine = self._create_engine()
-        self._create_schema(engine)
+    @aiocachedmethod(operator.attrgetter("engine_cache"))
+    async def _get_engine(self) -> asyncpg.Pool:
+        engine = await self._create_engine()
+        await self._create_schema(engine)
         return engine
 
-    def _create_engine(self):
-        engine = psycopg2.connect(
+    async def _create_engine(self, timeout=5):
+        engine = await asyncpg.create_pool(
             host=self.tenant_db_settings.tenant_database_ip,
             port=self.tenant_db_settings.tenant_database_port,
             user=self.tenant_db_settings.tenant_database_username,
             password=self.tenant_db_settings.tenant_database_password,
             database=self.tenant_db_settings.tenant_database_name,
+            max_inactive_connection_lifetime=timeout,
         )
         return engine
 
-    def _create_schema(self, engine: psycopg2):
-        with engine.cursor() as connection:
-            connection.execute(
+    async def _create_schema(self, engine):
+        async with engine.acquire() as connection:
+            await connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS tenant(
                     name TEXT,
@@ -87,7 +92,7 @@ class TenantRepository:
             """
             )
 
-    def insert_into_tenant(
+    async def insert_into_tenant(
         self,
         name: str,
         email_id: str,
@@ -96,29 +101,26 @@ class TenantRepository:
         password: str,
         weekly_quota: int = 125,
     ):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            await connection.execute(
                 """
                 INSERT INTO tenant
                 (name, email_id, phone_number, api_key, password,
                 weekly_quota, balance_quota, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
-                (
-                    name,
-                    email_id,
-                    phone_number,
-                    api_key,
-                    password,
-                    weekly_quota,
-                    weekly_quota,
-                    datetime.now(pytz.UTC),
-                ),
+                name,
+                email_id,
+                phone_number,
+                api_key,
+                password,
+                weekly_quota,
+                weekly_quota,
+                datetime.now(pytz.UTC),
             )
-            engine.commit()
 
-    def insert_into_tenant_document(
+    async def insert_into_tenant_document(
         self,
         document_uuid: str,
         document_name: str,
@@ -126,178 +128,164 @@ class TenantRepository:
         prompt: str,
         welcome_message: str,
     ):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            await connection.execute(
                 """
                 INSERT INTO tenant_document
                 (document_uuid, document_name, documents_list, prompt,
                 welcome_message, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 """,
-                (
-                    document_uuid,
-                    document_name,
-                    documents_list,
-                    prompt,
-                    welcome_message,
-                    datetime.now(pytz.UTC),
-                ),
+                document_uuid,
+                document_name,
+                documents_list,
+                prompt,
+                welcome_message,
+                datetime.now(pytz.UTC),
             )
-            engine.commit()
 
-    def insert_into_tenant_bot(
+    async def insert_into_tenant_bot(
         self,
         tenant_api_key: str,
         document_uuid: str,
         phone_number: str,
         country_code: str,
     ):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            await connection.execute(
                 """
                 INSERT INTO tenant_bot
                 (tenant_api_key, document_uuid, phone_number, country_code, created_at)
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES ($1, $2, $3, $4, $5)
                 """,
-                (
-                    tenant_api_key,
-                    document_uuid,
-                    phone_number,
-                    country_code,
-                    datetime.now(pytz.UTC),
-                ),
+                tenant_api_key,
+                document_uuid,
+                phone_number,
+                country_code,
+                datetime.now(pytz.UTC),
             )
-            engine.commit()
 
-    def insert_into_tenant_reset_password(
+    async def insert_into_tenant_reset_password(
         self,
         tenant_api_key: str,
         verification_code: str,
         expiry_time: datetime,
-    ):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+    ) -> int:
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            return await connection.fetchval(
                 """
                 INSERT INTO tenant_reset_password
                 (tenant_api_key, verification_code, expiry_time)
-                VALUES (%s, %s, %s)
-                RETURNING *
+                VALUES ($1, $2, $3)
+                RETURNING id
                 """,
-                (tenant_api_key, verification_code, expiry_time),
+                tenant_api_key,
+                verification_code,
+                expiry_time,
             )
-            result = connection.fetchone()
-            engine.commit()
-            return result
 
-    def get_reset_password_details(
+    async def get_reset_password_details(
         self, reset_password_id: str, verification_code: str
     ):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            return await connection.fetchrow(
                 """
                 SELECT * FROM tenant_reset_password
-                WHERE id = %s and verification_code = %s
+                WHERE id = $1 and verification_code = $2
                 """,
-                (reset_password_id, verification_code),
+                int(reset_password_id),
+                verification_code,
             )
-            return connection.fetchone()
 
-    def get_balance_quota_from_api_key(self, api_key: str):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+    async def get_balance_quota_from_api_key(self, api_key: str):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            return await connection.fetchval(
                 """
                 SELECT balance_quota FROM tenant
-                WHERE api_key = %s
+                WHERE api_key = $1
                 """,
-                (api_key,),
+                api_key,
             )
-            return connection.fetchone()
 
-    def get_tenant_details(self, email_id: str):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+    async def get_tenant_details(self, email_id: str):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            return await connection.fetchrow(
                 """
                 SELECT * FROM tenant
-                WHERE email_id = %s
+                WHERE email_id = $1
                 """,
-                (email_id,),
+                email_id,
             )
-            return connection.fetchone()
 
-    def get_all_tenant_emails(self):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+    async def get_all_tenant_emails(self):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            email_records = await connection.fetch(
                 """
                 SELECT email_id FROM tenant
                 """,
             )
-            email_records = connection.fetchall()
             registered_emails = [email_record[0] for email_record in email_records]
             return registered_emails
 
-    def get_tenant_bot_details(self, api_key: str):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+    async def get_tenant_bot_details(self, api_key: str):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            return await connection.fetch(
                 """
                 SELECT * FROM tenant_bot
-                WHERE tenant_api_key = %s
+                WHERE tenant_api_key = $1
                 """,
-                (api_key,),
+                api_key,
             )
-            return connection.fetchall()
 
-    def get_tenant_document_details(self, document_uuid: str):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+    async def get_tenant_document_details(self, document_uuid: str):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            return await connection.fetchrow(
                 """
                 SELECT * FROM tenant_document
-                WHERE document_uuid = %s
+                WHERE document_uuid = $1
                 """,
-                (document_uuid,),
+                document_uuid,
             )
-            return connection.fetchone()
 
-    def get_tenant_document_details_from_email_id(self, email_id: str):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+    async def get_tenant_document_details_from_email_id(self, email_id: str):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            return await connection.fetch(
                 """
                 SELECT tb.document_uuid, tb.phone_number, td.document_name, tb.country_code FROM tenant t
                 JOIN tenant_bot tb ON t.api_key = tb.tenant_api_key
                 JOIN tenant_document td ON td.document_uuid = tb.document_uuid
-                WHERE t.email_id = %s
+                WHERE t.email_id = $1
                 """,
-                (email_id,),
+                email_id,
             )
-            return connection.fetchall()
 
-    def delete_tenant_bot_details(self, document_uuid: str):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+    async def delete_tenant_bot_details(self, document_uuid: str):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            await connection.execute(
                 """
                 DELETE from tenant_bot
-                WHERE document_uuid = %s
+                WHERE document_uuid = $1
                 """,
-                (document_uuid,),
+                document_uuid,
             )
-            engine.commit()
 
-    def update_tenant_bot_details(
+    async def update_tenant_bot_details(
         self, document_uuid: str, tenant_api_key: str, updated_bot_details: list
     ):
-        self.delete_tenant_bot_details(document_uuid=document_uuid)
+        await self.delete_tenant_bot_details(document_uuid=document_uuid)
         for updated_bot_detail in updated_bot_details:
-            self.insert_into_tenant_bot(
+            await self.insert_into_tenant_bot(
                 tenant_api_key=tenant_api_key,
                 document_uuid=document_uuid,
                 phone_number=updated_bot_detail["country_code"]
@@ -305,69 +293,59 @@ class TenantRepository:
                 country_code=updated_bot_detail["country_code"],
             )
 
-    def update_tenant_password(self, api_key: str, new_password: str):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+    async def update_tenant_password(self, api_key: str, new_password: str):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            await connection.execute(
                 """
                 UPDATE tenant
-                SET password = %s
-                WHERE api_key = %s
+                SET password = $1
+                WHERE api_key = $2
                 """,
-                (
-                    new_password,
-                    api_key,
-                ),
+                new_password,
+                api_key,
             )
-            engine.commit()
 
-    def update_balance_quota(self, api_key: str, balance_quota: str):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+    async def update_balance_quota(self, api_key: str, balance_quota: str):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            await connection.execute(
                 """
                 UPDATE tenant
-                SET balance_quota = %s
-                WHERE api_key = %s and balance_quota = %s
+                SET balance_quota = $1
+                WHERE api_key = $2 and balance_quota = $3
                 """,
-                (
-                    balance_quota - 1,
-                    api_key,
-                    balance_quota,
-                ),
+                balance_quota - 1,
+                api_key,
+                balance_quota,
             )
-            engine.commit()
 
-    def update_tenant_information(
+    async def update_tenant_information(
         self, name: str, email_id: str, api_key: str, weekly_quota: int
     ):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            await connection.execute(
                 """
                 UPDATE tenant
-                SET name = %s, email_id = %s, weekly_quota = %s, balance_quota = %s
-                WHERE api_key = %s
+                SET name = $1, email_id = $2, weekly_quota = $3, balance_quota = $4
+                WHERE api_key = $5
                 """,
-                (
-                    name,
-                    email_id,
-                    weekly_quota,
-                    weekly_quota,
-                    api_key,
-                ),
+                name,
+                email_id,
+                weekly_quota,
+                weekly_quota,
+                api_key,
             )
-            engine.commit()
 
-    def reset_balance_quota_for_tenant(self, api_key: str):
-        engine = self._get_engine()
-        with engine.cursor() as connection:
-            connection.execute(
+    async def reset_balance_quota_for_tenant(self, api_key: str):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            await connection.execute(
                 """
                 UPDATE tenant
                 SET balance_quota = weekly_quota
-                WHERE api_key = %s
+                WHERE api_key = $1
                 """,
-                (api_key,),
+                api_key,
             )
-            engine.commit()

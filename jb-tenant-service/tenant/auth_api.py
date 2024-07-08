@@ -51,14 +51,16 @@ async def login(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     tenant_repository: Annotated[TenantRepository, Depends(get_tenant_repository)],
 ):
-    tenant_detail = tenant_repository.get_tenant_details(email_id=form_data.username)
+    tenant_detail = await tenant_repository.get_tenant_details(
+        email_id=form_data.username
+    )
     if tenant_detail is None:
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={"message": "Invalid credentials"},
         )
     if not verify_password(
-        password=form_data.password, hashed_password=tenant_detail[4]
+        password=form_data.password, hashed_password=tenant_detail.get("password")
     ):
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -66,7 +68,7 @@ async def login(
         )
 
     access_token = create_token(
-        data={"email": form_data.username, "name": tenant_detail[0]},
+        data={"email": form_data.username, "name": tenant_detail.get("name")},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRY_MINUTES),
     )
     refresh_token = create_token(
@@ -100,11 +102,11 @@ async def signup(
     if tenant_detail is not None:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={"message": "User with this username already exists"},
+            content={"message": "User with this email already exists"},
         )
 
     hashed_password = get_hashed_password(password=signup_request.password)
-    tenant_repository.insert_into_tenant(
+    await tenant_repository.insert_into_tenant(
         name=signup_request.name,
         email_id=signup_request.email,
         phone_number=signup_request.phone_number,
@@ -179,7 +181,7 @@ async def reset_password(
     tenant_repository: Annotated[TenantRepository, Depends(get_tenant_repository)],
 ):
     email = reset_password_request.email
-    tenant_details = tenant_repository.get_tenant_details(email_id=email)
+    tenant_details = await tenant_repository.get_tenant_details(email_id=email)
     if tenant_details is None:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -189,15 +191,15 @@ async def reset_password(
         ((int(time.time()) * 100000) + random.randint(0, 99999)) % 1000000
     ).zfill(6)
     expiry_time = datetime.utcnow() + timedelta(minutes=15)
-    reset_password_details = tenant_repository.insert_into_tenant_reset_password(
-        tenant_api_key=tenant_details[2],
+    reset_password_id = await tenant_repository.insert_into_tenant_reset_password(
+        tenant_api_key=tenant_details.get("api_key"),
         verification_code=verification_code,
         expiry_time=expiry_time,
     )
     await send_email(
         recepient_email=email,
-        recepient_name=tenant_details[0],
-        reset_id=reset_password_details[0],
+        recepient_name=tenant_details.get("name"),
+        reset_id=reset_password_id,
         verification_code=verification_code,
     )
     return JSONResponse(content={"detail": "Verification code sent successfully"})
@@ -212,7 +214,7 @@ async def update_password(
     update_password_request: UpdatePasswordRequest,
     tenant_repository: Annotated[TenantRepository, Depends(get_tenant_repository)],
 ):
-    reset_password_details = tenant_repository.get_reset_password_details(
+    reset_password_details = await tenant_repository.get_reset_password_details(
         reset_password_id=update_password_request.reset_password_id,
         verification_code=update_password_request.verification_code,
     )
@@ -222,7 +224,7 @@ async def update_password(
             content={"message": "Incorrect credentials"},
         )
     current_timestamp = datetime.utcnow().astimezone(utc)
-    if current_timestamp > reset_password_details[3]:
+    if current_timestamp > reset_password_details.get("expiry_time"):
         return JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={
@@ -231,7 +233,8 @@ async def update_password(
         )
 
     hashed_password = get_hashed_password(password=update_password_request.new_password)
-    tenant_repository.update_tenant_password(
-        api_key=reset_password_details[1], new_password=hashed_password
+    await tenant_repository.update_tenant_password(
+        api_key=reset_password_details.get("tenant_api_key"),
+        new_password=hashed_password,
     )
     return JSONResponse(content={"detail": "Successfully updated tenant password"})
