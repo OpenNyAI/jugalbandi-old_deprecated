@@ -98,7 +98,9 @@ async def signup(
     signup_request: SignupRequest,
     tenant_repository: Annotated[TenantRepository, Depends(get_tenant_repository)],
 ):
-    tenant_detail = tenant_repository.get_tenant_details(email_id=signup_request.email)
+    tenant_detail = await tenant_repository.get_tenant_details(
+        email_id=signup_request.email
+    )
     if tenant_detail is not None:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,

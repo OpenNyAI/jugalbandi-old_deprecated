@@ -4,10 +4,13 @@ import random
 import string
 import time
 from datetime import datetime, timedelta
+from email.message import EmailMessage
+from smtplib import SMTP
 from typing import List
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from jinja2 import Template
 from jose import JWTError, jwt
 from jugalbandi.core.caching import aiocached
 from jugalbandi.document_collection import (
@@ -18,16 +21,15 @@ from jugalbandi.document_collection import (
 from jugalbandi.tenant.tenant_repository import TenantRepository
 from passlib.context import CryptContext
 from pydantic import BaseModel, ValidationError
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Content, Email, Mail, To
 from starlette.middleware.base import BaseHTTPMiddleware
 
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 jwt_secret_key = os.environ["JWT_TOKEN_SECRET_KEY"]
 jwt_algorithm = os.environ["JWT_TOKEN_ALGORITHM"]
-email_api_key = os.environ["EMAIL_API_KEY"]
 app_base_url = os.environ["APP_BASE_URL"]
 app_sub_url = os.environ["APP_SUB_URL"]
+base_email = os.environ["BASE_EMAIL"]
+base_email_app_password = os.environ["BASE_EMAIL_APP_PASSWORD"]
 
 
 class Document(BaseModel):
@@ -186,6 +188,10 @@ async def send_email(
         f"{app_base_url}/{app_sub_url}?reset_id={reset_id}"
         f"&verification_code={verification_code}"
     )
+    server = SMTP("smtp.gmail.com", 587)
+    server.starttls()
+    server.login(base_email, base_email_app_password)
+    message = EmailMessage()
     html_template = """
     <!DOCTYPE html>
     <html>
@@ -261,17 +267,14 @@ async def send_email(
     </body>
     </html>
     """
-    html_template = html_template.replace("{{recepient_name}}", recepient_name)
-    html_template = html_template.replace("{{verification_link}}", verification_link)
+    template = Template(html_template)
+    html_content = template.render(
+        recepient_name=recepient_name, verification_link=verification_link
+    )
+    message.add_alternative(html_content, subtype="html")
+    message["Subject"] = "Password Reset Code"
+    message["From"] = base_email
+    message["To"] = recepient_email
 
-    sg = SendGridAPIClient(email_api_key)
-    from_email = Email("support@opennyai.org")
-    to_email = To(recepient_email)
-    subject = "Annotation application: Password Reset"
-    content = Content("text/html", html_template)
-    mail = Mail(from_email, to_email, subject, content)
-    mail_json = mail.get()
-
-    response = sg.client.mail.send.post(request_body=mail_json)
-    print(response.status_code)
-    print(response.headers)
+    server.send_message(message)
+    server.quit()
