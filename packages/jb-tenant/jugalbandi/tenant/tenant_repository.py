@@ -201,6 +201,19 @@ class TenantRepository:
                 verification_code,
             )
 
+    async def get_document_details_from_user_email(self, email: str):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            return await connection.fetch(
+                """
+                SELECT DISTINCT tenant_bot.document_uuid, tenant_document.document_name FROM tenant_bot
+                JOIN tenant ON tenant_bot.tenant_api_key = tenant.api_key
+                JOIN tenant_document ON tenant_document.document_uuid = tenant_bot.document_uuid
+                WHERE tenant.email_id = $1;
+                """,
+                email,
+            )
+
     async def get_balance_quota_from_api_key(self, api_key: str):
         engine = await self._get_engine()
         async with engine.acquire() as connection:

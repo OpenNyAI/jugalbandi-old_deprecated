@@ -4,10 +4,17 @@ import random
 import string
 import time
 from datetime import datetime, timedelta
+from typing import List
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
+from jugalbandi.core.caching import aiocached
+from jugalbandi.document_collection import (
+    DocumentRepository,
+    GoogleStorage,
+    LocalStorage,
+)
 from jugalbandi.tenant.tenant_repository import TenantRepository
 from passlib.context import CryptContext
 from pydantic import BaseModel, ValidationError
@@ -21,6 +28,15 @@ jwt_algorithm = os.environ["JWT_TOKEN_ALGORITHM"]
 email_api_key = os.environ["EMAIL_API_KEY"]
 app_base_url = os.environ["APP_BASE_URL"]
 app_sub_url = os.environ["APP_SUB_URL"]
+
+
+class Document(BaseModel):
+    id: str
+    file_name: str
+
+
+class DocumentsList(BaseModel):
+    documents: List[Document]
 
 
 class SignupRequest(BaseModel):
@@ -87,6 +103,16 @@ async def get_tenant_repository() -> TenantRepository:
     return TenantRepository()
 
 
+@aiocached(cache={})
+async def get_document_repository() -> DocumentRepository:
+    return DocumentRepository(
+        LocalStorage(os.environ["DOCUMENT_LOCAL_STORAGE_PATH"]),
+        GoogleStorage(
+            os.environ["GCP_BUCKET_NAME"], os.environ["GCP_BUCKET_FOLDER_NAME"]
+        ),
+    )
+
+
 def generate_api_key(length=32):
     timestamp = str(time.time()).encode("utf-8")
     random_data = "".join(
@@ -132,7 +158,7 @@ def decode_token(token: str) -> str:
                 detail="Token expired",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        return payload["username"]
+        return payload["email"]
     except (JWTError, ValidationError):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

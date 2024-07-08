@@ -1,17 +1,20 @@
-from typing import AsyncIterator, Self
-import os
 import logging
+import os
+from datetime import timedelta
+from typing import AsyncIterator, Self
+
 import aiohttp
-from .storage import Storage
+from gcloud.aio.auth import Token
 from gcloud.aio.storage import Storage as GoogleAioStorage  # for async operations
 from google.cloud import storage  # for synchronous operations
-from gcloud.aio.auth import Token
 from tenacity import (
-    retry,
-    wait_random_exponential,
     after_log,
+    retry,
     retry_if_not_exception_type,
+    wait_random_exponential,
 )
+
+from .storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +211,21 @@ class GoogleStorage(Storage):
         blob = bucket.blob(blob_name)
         return blob.public_url
 
+    async def signed_public_url(
+        self, file_path: str, expiration_minutes: int = 15
+    ) -> str:
+        blob_name = f"{self.base_path}/{file_path}"
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(self.bucket_name)
+        blob = bucket.blob(blob_name)
+        expiration_time = timedelta(minutes=expiration_minutes)
+
+        # Generate the signed URL
+        signed_url = blob.generate_signed_url(
+            version="v4", expiration=expiration_time, method="GET"
+        )
+        return signed_url
+
     async def file_exists(self, file_path: str) -> bool:
         blob_name = f"{self.base_path}/{file_path}"
         client = storage.Client()
@@ -266,10 +284,11 @@ class GoogleStorage(Storage):
             connector=self.connector, connector_owner=False
         ) as session:
             async with GoogleAioStorage(session=session, token=self.token) as client:
-                objects = await client.list_objects(self.bucket_name,
-                                                    params={"prefix": full_file_path})
-                for blob in objects['items']:
-                    await client.delete(self.bucket_name, blob['name'])
+                objects = await client.list_objects(
+                    self.bucket_name, params={"prefix": full_file_path}
+                )
+                for blob in objects["items"]:
+                    await client.delete(self.bucket_name, blob["name"])
 
     async def list_all_files(self, folder_path: str):
         prefix = f"{self._relative_path(folder_path)}/"
