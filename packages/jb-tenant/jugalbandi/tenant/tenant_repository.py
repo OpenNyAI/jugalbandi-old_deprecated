@@ -275,7 +275,7 @@ class TenantRepository:
         async with engine.acquire() as connection:
             return await connection.fetch(
                 """
-                SELECT tb.phone_number, tb.country_code, tb.created_at FROM tenant t
+                SELECT tb.phone_number, tb.country_code FROM tenant t
                 JOIN tenant_bot tb ON t.api_key = tb.tenant_api_key
                 JOIN tenant_document td ON td.document_uuid = tb.document_uuid
                 WHERE t.email_id = $1

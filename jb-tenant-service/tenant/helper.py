@@ -37,7 +37,6 @@ smtp_port = os.environ["SMTP_PORT"]
 class BotUserPhoneNumber(BaseModel):
     phone_number: str
     country_code: str
-    created_at: datetime
 
 
 class BasicDocument(BaseModel):
@@ -55,6 +54,15 @@ class Document(BasicDocument):
 
 class DocumentsList(BaseModel):
     documents: List[BasicDocument]
+
+
+class PostDocumentRequest(BaseModel):
+    document_id: str
+    document_name: str
+    documents_list: List[str]
+    prompt: str
+    welcome_message: str
+    phone_numbers: List[BotUserPhoneNumber]
 
 
 class SignupRequest(BaseModel):
