@@ -62,7 +62,9 @@ class TenantRepository:
                     password TEXT,
                     weekly_quota INTEGER DEFAULT 125,
                     balance_quota INTEGER DEFAULT 125,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    description TEXT
                 );
                 CREATE TABLE IF NOT EXISTS tenant_document(
                     document_uuid TEXT PRIMARY KEY,
@@ -126,6 +128,7 @@ class TenantRepository:
         document_name: str,
         documents_list: list,
         prompt: str,
+        description: str,
         welcome_message: str,
     ):
         engine = await self._get_engine()
@@ -134,8 +137,8 @@ class TenantRepository:
                 """
                 INSERT INTO tenant_document
                 (document_uuid, document_name, documents_list, prompt,
-                welcome_message, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                welcome_message, created_at, description)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 """,
                 document_uuid,
                 document_name,
@@ -143,6 +146,32 @@ class TenantRepository:
                 prompt,
                 welcome_message,
                 datetime.now(pytz.UTC),
+                description,
+            )
+
+    async def update_tenant_document(
+        self,
+        document_uuid: str,
+        prompt: str,
+        description: str,
+        welcome_message: str,
+    ):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            await connection.execute(
+                """
+                UPDATE tenant_document
+                SET prompt = $1,
+                description = $2,
+                welcome_message = $3,
+                updated_at = $4
+                WHERE document_uuid = $5
+                """,
+                prompt,
+                description,
+                welcome_message,
+                datetime.now(pytz.UTC),
+                document_uuid,
             )
 
     async def insert_into_tenant_bot(
@@ -165,6 +194,22 @@ class TenantRepository:
                 phone_number,
                 country_code,
                 datetime.now(pytz.UTC),
+            )
+
+    async def delete_tenant_bot(
+        self,
+        tenant_api_key: str,
+        document_uuid: str,
+    ):
+        engine = await self._get_engine()
+        async with engine.acquire() as connection:
+            await connection.execute(
+                """
+                DELETE FROM tenant_bot
+                WHERE tenant_api_key = $1 AND document_uuid = $2
+                """,
+                tenant_api_key,
+                document_uuid,
             )
 
     async def insert_into_tenant_reset_password(
@@ -207,7 +252,7 @@ class TenantRepository:
             return await connection.fetch(
                 """
                 SELECT DISTINCT tenant_bot.document_uuid, tenant_document.document_name,
-                tenant_document.created_at FROM tenant_bot
+                tenant_document.created_at, tenant_document.updated_at, tenant_document.description FROM tenant_bot
                 JOIN tenant ON tenant_bot.tenant_api_key = tenant.api_key
                 JOIN tenant_document ON tenant_document.document_uuid = tenant_bot.document_uuid
                 WHERE tenant.email_id = $1;

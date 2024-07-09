@@ -12,6 +12,7 @@ from .helper import (
     Document,
     DocumentsList,
     PostDocumentRequest,
+    PutDocumentRequest,
     TokenValidationMiddleware,
     decode_token,
     get_document_repository,
@@ -112,6 +113,8 @@ async def get_document_info(
         files=document_details.get("documents_list"),
         prompt=document_details.get("prompt"),
         created_at=document_details.get("created_at"),
+        updated_at=document_details.get("updated_at"),
+        description=document_details.get("description"),
         welcome_message=document_details.get("welcome_message"),
         phone_numbers=phone_numbers,
     )
@@ -138,8 +141,8 @@ async def get_documents(
             id=str(document.get("document_uuid")),
             name=document.get("document_name"),
             created_at=document.get("created_at"),
-            # updated_at="",
-            # description="",
+            updated_at=document.get("updated_at"),
+            description=document.get("description"),
         )
         for document in documents_list
     ]
@@ -147,11 +150,12 @@ async def get_documents(
 
 
 @user_app.post(
-    "/documents",
+    "/documents/{document_id}",
     summary="Create a new document bot",
     tags=["Document"],
 )
 async def post_documents(
+    document_id: str,
     post_document_request: PostDocumentRequest,
     request: Request,
     tenant_repository: Annotated[TenantRepository, Depends(get_tenant_repository)],
@@ -160,17 +164,51 @@ async def post_documents(
     email = decode_token(token=token)
     tenant_details = await tenant_repository.get_tenant_details(email_id=email)
     await tenant_repository.insert_into_tenant_document(
-        document_uuid=post_document_request.document_id,
+        document_uuid=document_id,
         document_name=post_document_request.document_name,
         documents_list=post_document_request.documents_list,
         prompt=post_document_request.prompt,
+        description=post_document_request.description,
         welcome_message=post_document_request.welcome_message,
     )
     for bot_user_phone_number in post_document_request.phone_numbers:
         await tenant_repository.insert_into_tenant_bot(
             tenant_api_key=tenant_details.get("api_key"),
-            document_uuid=post_document_request.document_id,
+            document_uuid=document_id,
             phone_number=bot_user_phone_number.phone_number,
             country_code=bot_user_phone_number.country_code,
         )
     return JSONResponse(content="Posted details successfully")
+
+
+@user_app.put(
+    "/documents/{document_id}",
+    summary="Update a document bot",
+    tags=["Document"],
+)
+async def put_documents(
+    document_id: str,
+    put_document_request: PutDocumentRequest,
+    request: Request,
+    tenant_repository: Annotated[TenantRepository, Depends(get_tenant_repository)],
+):
+    _, token = request.headers.get("authorization").split()
+    email = decode_token(token=token)
+    tenant_details = await tenant_repository.get_tenant_details(email_id=email)
+    await tenant_repository.update_tenant_document(
+        document_uuid=document_id,
+        prompt=put_document_request.prompt,
+        description=put_document_request.description,
+        welcome_message=put_document_request.welcome_message,
+    )
+    await tenant_repository.delete_tenant_bot(
+        tenant_api_key=tenant_details.get("api_key"), document_uuid=document_id
+    )
+    for bot_user_phone_number in put_document_request.phone_numbers:
+        await tenant_repository.insert_into_tenant_bot(
+            tenant_api_key=tenant_details.get("api_key"),
+            document_uuid=document_id,
+            phone_number=bot_user_phone_number.phone_number,
+            country_code=bot_user_phone_number.country_code,
+        )
+    return JSONResponse(content="Updated details successfully")

@@ -43,6 +43,8 @@ class BasicDocument(BaseModel):
     id: str
     name: str
     created_at: datetime
+    updated_at: datetime
+    description: str
 
 
 class Document(BasicDocument):
@@ -57,11 +59,18 @@ class DocumentsList(BaseModel):
 
 
 class PostDocumentRequest(BaseModel):
-    document_id: str
     document_name: str
     documents_list: List[str]
     prompt: str
     welcome_message: str
+    description: str
+    phone_numbers: List[BotUserPhoneNumber]
+
+
+class PutDocumentRequest(BaseModel):
+    prompt: str
+    welcome_message: str
+    description: str
     phone_numbers: List[BotUserPhoneNumber]
 
 
