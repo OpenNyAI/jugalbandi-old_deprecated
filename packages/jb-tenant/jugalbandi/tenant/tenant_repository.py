@@ -206,7 +206,8 @@ class TenantRepository:
         async with engine.acquire() as connection:
             return await connection.fetch(
                 """
-                SELECT DISTINCT tenant_bot.document_uuid, tenant_document.document_name FROM tenant_bot
+                SELECT DISTINCT tenant_bot.document_uuid, tenant_document.document_name,
+                tenant_document.created_at FROM tenant_bot
                 JOIN tenant ON tenant_bot.tenant_api_key = tenant.api_key
                 JOIN tenant_document ON tenant_document.document_uuid = tenant_bot.document_uuid
                 WHERE tenant.email_id = $1;
@@ -269,12 +270,12 @@ class TenantRepository:
                 document_uuid,
             )
 
-    async def get_tenant_document_details_from_email_id(self, email_id: str):
+    async def get_tenant_bot_details_from_email_id(self, email_id: str):
         engine = await self._get_engine()
         async with engine.acquire() as connection:
             return await connection.fetch(
                 """
-                SELECT tb.document_uuid, tb.phone_number, td.document_name, tb.country_code FROM tenant t
+                SELECT tb.phone_number, tb.country_code, tb.created_at FROM tenant t
                 JOIN tenant_bot tb ON t.api_key = tb.tenant_api_key
                 JOIN tenant_document td ON td.document_uuid = tb.document_uuid
                 WHERE t.email_id = $1

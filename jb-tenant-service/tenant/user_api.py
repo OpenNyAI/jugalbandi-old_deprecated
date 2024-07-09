@@ -1,4 +1,3 @@
-import os
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request, status
@@ -8,6 +7,8 @@ from jugalbandi.document_collection import DocumentRepository
 from jugalbandi.tenant import TenantRepository
 
 from .helper import (
+    BasicDocument,
+    BotUserPhoneNumber,
     Document,
     DocumentsList,
     TokenValidationMiddleware,
@@ -58,34 +59,72 @@ async def custom_exception_handler(request, exception):
 
 
 @user_app.get(
-    "/documents/{document_id}",
-    summary="Get a document from id",
+    "/documents/{document_id}/files/{file_name}",
+    summary="Get a signed public file url for a given file",
     tags=["Document"],
 )
-async def get_document_info(
+async def get_signed_public_file_url(
     document_id: str,
+    file_name: str,
     document_repository: Annotated[
         DocumentRepository, Depends(get_document_repository)
     ],
 ):
     document_collection = document_repository.get_collection(doc_id=document_id)
-    files = document_collection.list_files()
-    file_links = []
-    async for file in files:
-        signed_url = await document_collection.remote_store.signed_public_url(
-            file_path=file
-        )
-        file_links.append({"file_name": file, "signed_url": signed_url})
-    return JSONResponse(content=file_links)
+    signed_url = await document_collection.remote_store.signed_public_url(
+        file_path=file_name
+    )
+    return JSONResponse(
+        content={"file_name": file_name, "signed_public_url": signed_url}
+    )
 
 
 @user_app.get(
-    "/users/documents",
+    "/documents/{document_id}",
+    summary="Get a document information from id",
+    response_model=Document,
+    tags=["Document"],
+)
+async def get_document_info(
+    document_id: str,
+    request: Request,
+    tenant_repository: Annotated[TenantRepository, Depends(get_tenant_repository)],
+):
+    _, token = request.headers.get("authorization").split()
+    email = decode_token(token=token)
+    document_details = await tenant_repository.get_tenant_document_details(
+        document_uuid=document_id
+    )
+    bot_details = await tenant_repository.get_tenant_bot_details_from_email_id(
+        email_id=email
+    )
+    phone_numbers = [
+        BotUserPhoneNumber(
+            phone_number=bot_detail.get("phone_number"),
+            country_code=bot_detail.get("country_code"),
+            created_at=bot_detail.get("created_at"),
+        )
+        for bot_detail in bot_details
+    ]
+    document = Document(
+        id=document_details.get("document_uuid"),
+        name=document_details.get("document_name"),
+        files=document_details.get("documents_list"),
+        prompt=document_details.get("prompt"),
+        created_at=document_details.get("created_at"),
+        welcome_message=document_details.get("welcome_message"),
+        phone_numbers=phone_numbers,
+    )
+    return document
+
+
+@user_app.get(
+    "/documents",
     summary="Get documents for the current user",
     response_model=DocumentsList,
     tags=["Document"],
 )
-async def get_documents_for_given_user(
+async def get_documents(
     request: Request,
     tenant_repository: Annotated[TenantRepository, Depends(get_tenant_repository)],
 ):
@@ -95,18 +134,13 @@ async def get_documents_for_given_user(
         email=email
     )
     documents = [
-        Document(
+        BasicDocument(
             id=str(document.get("document_uuid")),
-            file_name=document.get("document_name"),
+            name=document.get("document_name"),
+            created_at=document.get("created_at"),
+            # updated_at="",
+            # description="",
         )
         for document in documents_list
     ]
     return DocumentsList(documents=documents)
-
-
-@user_app.get(
-    "/config",
-    summary="Get config for the current environment",
-)
-async def config():
-    return JSONResponse(content={"app_state": os.environ["APP_STATE"]})

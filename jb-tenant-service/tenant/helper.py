@@ -30,15 +30,31 @@ app_base_url = os.environ["APP_BASE_URL"]
 app_sub_url = os.environ["APP_SUB_URL"]
 base_email = os.environ["BASE_EMAIL"]
 base_email_app_password = os.environ["BASE_EMAIL_APP_PASSWORD"]
+smtp_host = os.environ["SMTP_HOST"]
+smtp_port = os.environ["SMTP_PORT"]
 
 
-class Document(BaseModel):
+class BotUserPhoneNumber(BaseModel):
+    phone_number: str
+    country_code: str
+    created_at: datetime
+
+
+class BasicDocument(BaseModel):
     id: str
-    file_name: str
+    name: str
+    created_at: datetime
+
+
+class Document(BasicDocument):
+    files: List[str]
+    prompt: str
+    welcome_message: str
+    phone_numbers: List[BotUserPhoneNumber]
 
 
 class DocumentsList(BaseModel):
-    documents: List[Document]
+    documents: List[BasicDocument]
 
 
 class SignupRequest(BaseModel):
@@ -188,7 +204,7 @@ async def send_email(
         f"{app_base_url}/{app_sub_url}?reset_id={reset_id}"
         f"&verification_code={verification_code}"
     )
-    server = SMTP("smtp.gmail.com", 587)
+    server = SMTP(smtp_host, smtp_port)
     server.starttls()
     server.login(base_email, base_email_app_password)
     message = EmailMessage()
