@@ -62,9 +62,7 @@ class TenantRepository:
                     password TEXT,
                     weekly_quota INTEGER DEFAULT 125,
                     balance_quota INTEGER DEFAULT 125,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                    updated_at TIMESTAMPTZ DEFAULT NOW(),
-                    description TEXT
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 );
                 CREATE TABLE IF NOT EXISTS tenant_document(
                     document_uuid TEXT PRIMARY KEY,
@@ -72,7 +70,9 @@ class TenantRepository:
                     documents_list TEXT[],
                     prompt TEXT NOT NULL,
                     welcome_message TEXT,
-                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    description TEXT
                 );
                 CREATE TABLE IF NOT EXISTS tenant_bot(
                     tenant_api_key TEXT,
