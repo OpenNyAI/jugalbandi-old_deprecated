@@ -134,7 +134,7 @@ def refresh_token(refresh_token: str = Cookie(None)):
 
     username = decode_token(refresh_token)
     access_token = create_token(
-        data={"username": username},
+        data={"email": username},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRY_MINUTES),
     )
     response = JSONResponse(content={"access_token": access_token})
