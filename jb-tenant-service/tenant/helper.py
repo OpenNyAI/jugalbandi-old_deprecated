@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from smtplib import SMTP
-from typing import List
+from typing import List, Optional
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -44,7 +44,7 @@ class BasicDocument(BaseModel):
     name: str
     created_at: datetime
     updated_at: datetime
-    description: str
+    description: Optional[str] = None
 
 
 class Document(BasicDocument):
@@ -63,14 +63,14 @@ class PostDocumentRequest(BaseModel):
     documents_list: List[str]
     prompt: str
     welcome_message: str
-    description: str
+    description: Optional[str] = None
     phone_numbers: List[BotUserPhoneNumber]
 
 
 class PutDocumentRequest(BaseModel):
     prompt: str
     welcome_message: str
-    description: str
+    description: Optional[str] = None
     phone_numbers: List[BotUserPhoneNumber]
 
 
