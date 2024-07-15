@@ -1,3 +1,4 @@
+import os
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request, status
@@ -74,7 +75,7 @@ async def get_signed_public_file_url(
 ):
     document_collection = document_repository.get_collection(doc_id=document_id)
     signed_url = await document_collection.remote_store.signed_public_url(
-        file_path=file_name
+        file_path=os.path.join(document_id, file_name)
     )
     return JSONResponse(
         content={"file_name": file_name, "signed_public_url": signed_url}
