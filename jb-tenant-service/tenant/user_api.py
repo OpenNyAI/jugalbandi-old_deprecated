@@ -95,6 +95,8 @@ async def get_document_info(
 ):
     _, token = request.headers.get("authorization").split()
     email = decode_token(token=token)
+    tenant_details = await tenant_repository.get_tenant_details(email_id=email)
+    _, tenant_phone_number = tenant_details.get("phone_number").split()
     document_details = await tenant_repository.get_tenant_document_details(
         document_uuid=document_id
     )
@@ -112,12 +114,13 @@ async def get_document_info(
         country_code = bot_detail.get("country_code")
         if phone_number.startswith(country_code):
             phone_number = phone_number[len(country_code) :]
-        phone_numbers.append(
-            BotUserPhoneNumber(
-                phone_number=phone_number,
-                country_code=country_code,
+        if phone_number != tenant_phone_number:
+            phone_numbers.append(
+                BotUserPhoneNumber(
+                    phone_number=phone_number,
+                    country_code=country_code,
+                )
             )
-        )
     document = Document(
         id=document_details.get("document_uuid"),
         name=document_details.get("document_name"),
