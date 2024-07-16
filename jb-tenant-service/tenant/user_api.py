@@ -106,13 +106,18 @@ async def get_document_info(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={"message": "Incorrect document ID for a given user"},
         )
-    phone_numbers = [
-        BotUserPhoneNumber(
-            phone_number=bot_detail.get("phone_number"),
-            country_code=bot_detail.get("country_code"),
+    phone_numbers = []
+    for bot_detail in bot_details:
+        phone_number = bot_detail.get("phone_number")
+        country_code = bot_detail.get("country_code")
+        if phone_number.startswith(country_code):
+            phone_number = phone_number[len(country_code) :]
+        phone_numbers.append(
+            BotUserPhoneNumber(
+                phone_number=phone_number,
+                country_code=country_code,
+            )
         )
-        for bot_detail in bot_details
-    ]
     document = Document(
         id=document_details.get("document_uuid"),
         name=document_details.get("document_name"),
@@ -220,7 +225,8 @@ async def put_documents(
         await tenant_repository.insert_into_tenant_bot(
             tenant_api_key=tenant_details.get("api_key"),
             document_uuid=document_id,
-            phone_number=bot_user_phone_number.phone_number,
+            phone_number=bot_user_phone_number.country_code
+            + bot_user_phone_number.phone_number,
             country_code=bot_user_phone_number.country_code,
         )
     return JSONResponse(content="Updated details successfully")
