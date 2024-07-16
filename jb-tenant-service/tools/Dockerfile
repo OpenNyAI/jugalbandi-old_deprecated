@@ -1,6 +1,5 @@
 
-FROM python:3.11.4-bullseye 
-
+FROM python:3.11.4-bullseye
 
 RUN pip install --upgrade pip \
     && pip install --upgrade poetry \
@@ -8,6 +7,9 @@ RUN pip install --upgrade pip \
 
 WORKDIR /app
 COPY ./packages/jb-tenant ./packages/jb-tenant
+COPY ./packages/jb-document-collection ./packages/jb-document-collection
+COPY ./packages/jb-core ./packages/jb-core
+COPY ./packages/jb-storage ./packages/jb-storage
 
 WORKDIR /app/jb-tenant-service
 

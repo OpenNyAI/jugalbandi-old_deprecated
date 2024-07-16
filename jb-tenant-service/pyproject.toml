@@ -15,6 +15,7 @@ jb-tenant = {path = "../packages/jb-tenant", develop = true}
 bcrypt = "^4.1.3"
 jb-core = {path = "../packages/jb-core"}
 jb-document-collection = {path = "../packages/jb-document-collection"}
+asyncpg = "^0.29.0"
 
 [tool.pytest.ini_options]
 pythonpath = [
@@ -39,7 +40,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poe.tasks.build]
 shell = """
-docker build --platform=linux/amd64  -f tools/Dockerfile -t tenant_service:latest ..
+docker build --platform linux/amd64  -f tools/Dockerfile -t gcr.io/indian-legal-bert/tenant_service:latest ..
 """
 help = "build docker container"
 

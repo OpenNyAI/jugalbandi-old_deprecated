@@ -1,5 +1,5 @@
 #!/bin/bash
 
-docker run -it --rm -p 8000:8000 \
+docker run -it --rm -p 8080:8080 \
   --env-file .env \
-  tenant_service:latest
+  gcr.io/indian-legal-bert/tenant_service:latest
