@@ -177,11 +177,17 @@ async def post_documents(
         description=post_document_request.description,
         welcome_message=post_document_request.welcome_message,
     )
-    for bot_user_phone_number in post_document_request.phone_numbers:
+    phone_numbers = post_document_request.phone_numbers
+    country_code, tenant_phone_number = tenant_details.get("phone_number").split()
+    phone_numbers.append(
+        BotUserPhoneNumber(phone_number=tenant_phone_number, country_code=country_code)
+    )
+    for bot_user_phone_number in phone_numbers:
         await tenant_repository.insert_into_tenant_bot(
             tenant_api_key=tenant_details.get("api_key"),
             document_uuid=document_id,
-            phone_number=bot_user_phone_number.phone_number,
+            phone_number=bot_user_phone_number.country_code
+            + bot_user_phone_number.phone_number,
             country_code=bot_user_phone_number.country_code,
         )
     return JSONResponse(content="Posted details successfully")
