@@ -99,8 +99,13 @@ async def get_document_info(
         document_uuid=document_id
     )
     bot_details = await tenant_repository.get_tenant_bot_details_from_email_id(
-        email_id=email
+        email_id=email, document_uuid=document_id
     )
+    if len(bot_details) == 0:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"message": "Incorrect document ID for a given user"},
+        )
     phone_numbers = [
         BotUserPhoneNumber(
             phone_number=bot_detail.get("phone_number"),

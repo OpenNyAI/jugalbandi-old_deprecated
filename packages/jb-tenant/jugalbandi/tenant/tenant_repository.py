@@ -315,7 +315,9 @@ class TenantRepository:
                 document_uuid,
             )
 
-    async def get_tenant_bot_details_from_email_id(self, email_id: str):
+    async def get_tenant_bot_details_from_email_id(
+        self, email_id: str, document_uuid: str
+    ):
         engine = await self._get_engine()
         async with engine.acquire() as connection:
             return await connection.fetch(
@@ -323,9 +325,10 @@ class TenantRepository:
                 SELECT tb.phone_number, tb.country_code FROM tenant t
                 JOIN tenant_bot tb ON t.api_key = tb.tenant_api_key
                 JOIN tenant_document td ON td.document_uuid = tb.document_uuid
-                WHERE t.email_id = $1
+                WHERE t.email_id = $1 AND tb.document_uuid = $2
                 """,
                 email_id,
+                document_uuid,
             )
 
     async def delete_tenant_bot_details(self, document_uuid: str):
